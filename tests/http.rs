@@ -11,6 +11,16 @@ use tower::ServiceExt;
 
 use htmx_tasks::{app, AppState};
 
+async fn empty_state() -> AppState {
+    AppState::in_memory().await.expect("in-memory db")
+}
+
+async fn sample_state() -> AppState {
+    let s = empty_state().await;
+    s.seed_if_empty().await.expect("seed");
+    s
+}
+
 struct Client {
     app: Router,
     cookie: String,
@@ -98,7 +108,7 @@ fn extract_between<'a>(s: &'a str, start: &str, end: &str) -> &'a str {
 
 #[tokio::test]
 async fn full_page_for_browsers_fragment_for_htmx() {
-    let c = Client::new(AppState::with_sample_data()).await;
+    let c = Client::new(sample_state().await).await;
 
     let (status, body) = c
         .send(
@@ -126,7 +136,7 @@ async fn full_page_for_browsers_fragment_for_htmx() {
 
 #[tokio::test]
 async fn search_filters_by_title() {
-    let c = Client::new(AppState::with_sample_data()).await;
+    let c = Client::new(sample_state().await).await;
     let (_, body) = c
         .send(
             c.req(Method::GET, "/?q=askama", true, false)
@@ -149,7 +159,7 @@ async fn search_filters_by_title() {
 
 #[tokio::test]
 async fn mutations_without_csrf_token_are_rejected() {
-    let c = Client::new(AppState::new()).await;
+    let c = Client::new(empty_state().await).await;
     let (status, _) = c.form(Method::POST, "/tasks", "title=x", false).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
@@ -165,7 +175,7 @@ async fn mutations_without_csrf_token_are_rejected() {
 
 #[tokio::test]
 async fn create_returns_row_and_oob_counter_and_cleared_form() {
-    let state = AppState::new();
+    let state = empty_state().await;
     let c = Client::new(state.clone()).await;
 
     let (status, body) = c.form(Method::POST, "/tasks", "title=Buy+milk", true).await;
@@ -176,12 +186,12 @@ async fn create_returns_row_and_oob_counter_and_cleared_form() {
     assert!(body.contains("1 remaining"));
     assert!(body.contains(r#"id="task-form" class="task-form" hx-swap-oob="true""#));
     assert!(body.contains(r#"value="""#), "form must be cleared");
-    assert_eq!(state.remaining(), 1);
+    assert_eq!(state.remaining().await.unwrap(), 1);
 }
 
 #[tokio::test]
 async fn create_escapes_html_in_titles() {
-    let c = Client::new(AppState::new()).await;
+    let c = Client::new(empty_state().await).await;
     let (status, body) = c
         .form(
             Method::POST,
@@ -198,20 +208,20 @@ async fn create_escapes_html_in_titles() {
 
 #[tokio::test]
 async fn create_with_empty_title_returns_422_with_inline_error() {
-    let state = AppState::new();
+    let state = empty_state().await;
     let c = Client::new(state.clone()).await;
     let (status, body) = c.form(Method::POST, "/tasks", "title=+++", true).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(body.contains(r#"role="alert""#));
     assert!(body.contains("must not be empty"));
-    assert_eq!(state.remaining(), 0);
+    assert_eq!(state.remaining().await.unwrap(), 0);
 }
 
 #[tokio::test]
 async fn toggle_and_delete_update_row_and_counter() {
-    let state = AppState::new();
-    let id = state.create("one");
-    state.create("two");
+    let state = empty_state().await;
+    let id = state.create("one").await.unwrap();
+    state.create("two").await.unwrap();
     let c = Client::new(state.clone()).await;
 
     let (status, body) = c
@@ -231,7 +241,7 @@ async fn toggle_and_delete_update_row_and_counter() {
     assert_eq!(status, StatusCode::OK);
     assert!(!body.contains("<li"), "delete must not return a row");
     assert!(body.contains(r#"hx-swap-oob="true""#));
-    assert!(state.get(id).is_none());
+    assert!(state.get(id).await.unwrap().is_none());
 
     let (status, _) = c
         .send(

@@ -1,13 +1,15 @@
 //! htmx + axum + Askama task manager.
 //!
 //! Layout:
-//! - `state`     : server-side state (the single source of truth)
+//! - `state`     : SQLite-backed state via sqlx (the single source of truth)
+//! - `error`     : storage error → HTTP 500 mapping
 //! - `csrf`      : session-bound CSRF token + middleware
 //! - `htmx`      : request/response helpers for htmx headers
 //! - `templates` : Askama template structs, one per fragment
 //! - `handlers`  : HTTP handlers returning full pages or fragments
 
 mod csrf;
+mod error;
 mod handlers;
 mod htmx;
 mod state;
