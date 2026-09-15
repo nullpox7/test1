@@ -8,7 +8,17 @@ async fn main() {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
-    let app = htmx_tasks::app(htmx_tasks::AppState::with_sample_data());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://tasks.db".to_string());
+    let state = htmx_tasks::AppState::connect(&database_url)
+        .await
+        .expect("open database and run migrations");
+    match state.seed_if_empty().await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!("seeded {n} sample tasks"),
+        Err(err) => tracing::warn!(%err, "seeding failed"),
+    }
+    let app = htmx_tasks::app(state);
 
     let addr: SocketAddr = std::env::var("BIND")
         .unwrap_or_else(|_| "127.0.0.1:3000".to_string())

@@ -10,6 +10,7 @@ use tower_sessions::Session;
 
 use crate::{
     csrf,
+    error::AppError,
     htmx::{fragments, render, with_trigger, HxRequest},
     state::AppState,
     templates::{IndexPage, RemainingCount, TaskForm, TaskList, TaskRow},
@@ -29,26 +30,26 @@ pub async fn index(
     session: Session,
     HxRequest(is_hx): HxRequest,
     Query(params): Query<SearchParams>,
-) -> Response {
-    let tasks = state.search(&params.q);
+) -> Result<Response, AppError> {
+    let tasks = state.search(&params.q).await?;
 
     if is_hx {
-        return render(&TaskList {
+        return Ok(render(&TaskList {
             query: params.q,
             tasks,
-        });
+        }));
     }
 
-    render(&IndexPage {
+    Ok(render(&IndexPage {
         csrf_token: csrf::token(&session).await,
         query: params.q,
         tasks,
         count: RemainingCount {
-            remaining: state.remaining(),
+            remaining: state.remaining().await?,
             oob: false,
         },
         form: TaskForm::default(),
-    })
+    }))
 }
 
 #[derive(Deserialize)]
@@ -60,7 +61,10 @@ pub struct CreateForm {
 /// `POST /tasks` — on success return the new row plus an out-of-band
 /// counter and a cleared form. On validation error return 422 with the
 /// form re-rendered inline.
-pub async fn create(State(state): State<AppState>, Form(form): Form<CreateForm>) -> Response {
+pub async fn create(
+    State(state): State<AppState>,
+    Form(form): Form<CreateForm>,
+) -> Result<Response, AppError> {
     let title = form.title.trim();
     if let Some(error) = validate_title(title) {
         let body = render(&TaskForm {
@@ -68,16 +72,16 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<CreateForm>)
             error: Some(error),
             oob: false,
         });
-        return (StatusCode::UNPROCESSABLE_ENTITY, body).into_response();
+        return Ok((StatusCode::UNPROCESSABLE_ENTITY, body).into_response());
     }
 
-    let id = state.create(title);
-    let task = state.get(id).expect("just created");
+    let id = state.create(title).await?;
+    let task = state.get(id).await?.ok_or(sqlx::Error::RowNotFound)?;
 
     let resp = fragments(vec![
         TaskRow { task }.render(),
         RemainingCount {
-            remaining: state.remaining(),
+            remaining: state.remaining().await?,
             oob: true,
         }
         .render(),
@@ -88,33 +92,39 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<CreateForm>)
         }
         .render(),
     ]);
-    with_trigger(resp, "task-created")
+    Ok(with_trigger(resp, "task-created"))
 }
 
 /// `POST /tasks/{id}/toggle` — replace the row and update the counter.
-pub async fn toggle(State(state): State<AppState>, Path(id): Path<u64>) -> Response {
-    match state.toggle(id) {
-        Some(task) => fragments(vec![
+pub async fn toggle(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Response, AppError> {
+    match state.toggle(id).await? {
+        Some(task) => Ok(fragments(vec![
             TaskRow { task }.render(),
             RemainingCount {
-                remaining: state.remaining(),
+                remaining: state.remaining().await?,
                 oob: true,
             }
             .render(),
-        ]),
-        None => StatusCode::NOT_FOUND.into_response(),
+        ])),
+        None => Ok(StatusCode::NOT_FOUND.into_response()),
     }
 }
 
 /// `DELETE /tasks/{id}` — empty main swap removes the row; counter goes out-of-band.
-pub async fn delete(State(state): State<AppState>, Path(id): Path<u64>) -> Response {
-    if !state.delete(id) {
-        return StatusCode::NOT_FOUND.into_response();
+pub async fn delete(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Response, AppError> {
+    if !state.delete(id).await? {
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
-    render(&RemainingCount {
-        remaining: state.remaining(),
+    Ok(render(&RemainingCount {
+        remaining: state.remaining().await?,
         oob: true,
-    })
+    }))
 }
 
 fn validate_title(title: &str) -> Option<String> {

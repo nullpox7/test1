@@ -13,6 +13,15 @@ This is an htmx + axum + Askama app. The server is the single source of truth.
   events. Do not add client-side state stores. Never put tokens or personal
   data in localStorage/sessionStorage.
 
+## Data rules
+- SQL lives only in `src/state.rs`. Handlers call `AppState` methods and
+  never touch the pool directly.
+- Schema changes are new files in `migrations/` (never edit an applied one);
+  `sqlx::migrate!` applies them at startup. Queries use `query`/`query_as`
+  with `bind`, never string formatting.
+- Tests get a fresh database from `AppState::in_memory()`; never share a
+  file DB between tests.
+
 ## Security rules
 - Auth/session state stays in the server session (HttpOnly cookie).
 - All state-changing routes go through `csrf::require_token`. New mutating
