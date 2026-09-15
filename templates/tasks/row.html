@@ -1,0 +1,16 @@
+{# One task. The <li> is the swap target for toggle and delete. #}
+<li id="task-{{ task.id }}" class="task{% if task.done %} done{% endif %}">
+  <label>
+    <input type="checkbox" {% if task.done %}checked{% endif %}
+           hx-post="/tasks/{{ task.id }}/toggle"
+           hx-target="closest li"
+           hx-swap="outerHTML">
+    <span class="title">{{ task.title }}</span>
+  </label>
+  <button type="button" class="delete"
+          hx-delete="/tasks/{{ task.id }}"
+          hx-target="closest li"
+          hx-swap="outerHTML"
+          hx-confirm="Delete “{{ task.title }}”?"
+          aria-label="Delete">×</button>
+</li>

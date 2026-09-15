@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+
+{% block title %}Tasks{% endblock %}
+
+{% block content %}
+<header class="header">
+  <h1>Tasks</h1>
+  {{ count|safe }}
+</header>
+
+{{ form|safe }}
+
+<label class="search">
+  <span>Search</span>
+  <input type="search" name="q" value="{{ query }}" placeholder="filter by title"
+         hx-get="/"
+         hx-trigger="input changed delay:300ms, search"
+         hx-target="#task-list"
+         hx-swap="outerHTML"
+         hx-push-url="true">
+</label>
+
+{% include "tasks/list.html" %}
+{% endblock %}

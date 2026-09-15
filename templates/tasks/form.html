@@ -1,0 +1,13 @@
+{# Create form. On success the server returns it again with oob=true and an empty title. #}
+<form id="task-form" class="task-form"{% if oob %} hx-swap-oob="true"{% endif %}
+      hx-post="/tasks"
+      hx-target="#task-list"
+      hx-swap="beforeend"
+      hx-disabled-elt="find button">
+  <input type="text" name="title" value="{{ title }}" placeholder="New task" autocomplete="off" required
+         {% if error.is_some() %}aria-invalid="true"{% endif %}>
+  <button type="submit">Add</button>
+  {% if let Some(msg) = error %}
+    <p class="error" role="alert">{{ msg }}</p>
+  {% endif %}
+</form>
