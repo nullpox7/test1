@@ -1,0 +1,9 @@
+{# Search results. Replaced as a whole via hx-swap="outerHTML". #}
+<ul id="task-list" class="tasks" data-query="{{ query }}">
+  {% for task in tasks %}
+    {% include "tasks/row.html" %}
+  {% endfor %}
+  {% if tasks.is_empty() %}
+    <li class="empty">No tasks{% if !query.is_empty() %} matching “{{ query }}”{% endif %}.</li>
+  {% endif %}
+</ul>
